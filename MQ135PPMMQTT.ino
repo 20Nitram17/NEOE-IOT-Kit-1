@@ -141,6 +141,7 @@ void loop() {
   analogWrite(PINred, LEDred);
   analogWrite(PINblue, LEDblue);
  
+  delay(1000);
 }
 
 /* Get the resistance of the sensor, ie. the measurement value. Return the sensor resistance in kOhm */
