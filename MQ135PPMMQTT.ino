@@ -11,7 +11,7 @@
 #include <PubSubClient.h>
 
 /* Parameters for average calculation */
-const int numReadings = 200;
+const int numReadings = 100;
 int readings[numReadings]; // the readings from the analog input
 int readIndex = 0; // the index of the current reading
 float total = 0; // the running total
