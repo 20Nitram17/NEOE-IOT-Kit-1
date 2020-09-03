@@ -1,19 +1,17 @@
-/***************************************************************************
-  This is a library for the MQ135 air quality sensor. Developed for the
-  NEOE-IOT-Kit "Room Air Monitoring with MQ135 & NodeMCU"
-  https://www.neoe.io/iot-kit-2_136_1067/
+/**********************************************************************************************************************************
+  This is a library for the MQ135 air quality sensor. Developed for the NEOE-IOT-Kit "Room Air Monitoring with MQ135 & NodeMCU"
+  https://www.neoe.io/collections/neoe-iot-kits/products/smarthome-iot-bausatz-luftqualitatssensor-mq-135-nodemcu-arduino-pcb
   The library is still under construction and only a beta release.
   Developed with input and suggestions from the community.
-  Please share your feedback, thougths and suggestions with us.
-  https://www.facebook.com/groups/neoe.io/
-  Date of last change: May 5th, 2020
-**************************************************************************/
+  Please share your feedback, thougths and suggestions with us. https://www.facebook.com/groups/neoe.io/
+  Date of last change: September 3rd, 2020
+**********************************************************************************************************************************/
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
 /* Parameters for average calculation */
-const int numReadings = 10;
+const int numReadings = 200;
 int readings[numReadings]; // the readings from the analog input
 int readIndex = 0; // the index of the current reading
 float total = 0; // the running total
@@ -28,6 +26,9 @@ float average = 0; // the average
 
 /* Atmospheric CO2 level for calibration purposes */
 #define ATMOCO2 397.13
+
+/* Parameter for delay between measurements in miliseconds */
+int delay_time = 1000;
 
 /* Analog PIN */
 uint8_t _pin = 0;
@@ -48,10 +49,11 @@ float LEDblue;
 /* Parameter for notification status */
 int notified;
 
-// Update these with values suitable for your network.
+/* Update these with values suitable for your network. */
 const char* ssid = "ADD THE SSID OF YOUR WLAN HERE";
 const char* password = "ADD THE PASSWORD OF YOUR WLAN HERE";
 const char* mqtt_server = "ADD THE IP ADDRESS OF YOUR MQTT-SERVER HERE";
+const uint16_t mqtt_port = 1883;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -93,7 +95,7 @@ void setup() {
   }
 
   setup_wifi();
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqtt_server, mqtt_port);
 
 }
 
@@ -104,22 +106,23 @@ void loop() {
   }
   client.loop();
 
-  /* Read sensor data and create average */ total = total - readings[readIndex]; readings[readIndex] = analogRead(_pin); total = total + readings[readIndex]; readIndex = readIndex + 1; if (readIndex >= numReadings) {
+  /* Read sensor data and create average */ 
+  total = total - readings[readIndex]; readings[readIndex] = analogRead(_pin); total = total + readings[readIndex]; readIndex = readIndex + 1; if (readIndex >= numReadings) {
     readIndex = 0;
   }
   average = total / numReadings;
 
-  /* Sensor very volatile, smooth calibration, consider RCurrent with only 0,1% */
+  /* Sensor very volatile, smooth calibration, consider RCurrent with only 0,001% */
   float RCurrent = getRZero();
-  if ((((999 * RMax) + RCurrent) / 1000) > RMax) {
-    RMax = (((999 * RMax) + RCurrent) / 1000); //Aufgrund der hohen Ausschläge des Sensors behutsames Anpassen - RCurrent zu 0,1% berücksichtigen
+  if ((((9999 * RMax) + RCurrent) / 10000) > RMax) {
+    RMax = (((9999 * RMax) + RCurrent) / 10000); 
   }
 
   /* Calculate PPM */
   float ppm = getPPM();
 
-  /* Send data to MQTT */
-  client.publish("outTopic", String(ppm).c_str());
+  /* After calibration, send data to MQTT */
+  if (ppm > ATMOCO2)  client.publish("outTopic", String(ppm).c_str());
 
   /* Indicator LED */
   LEDblue = 0;
@@ -130,19 +133,20 @@ void loop() {
   if (LEDgreen < 0) LEDgreen = 0; 
 
   /* Calibration LED indicator. Switch already from blue to green when within 95% range. */
-  if (ppm < (0.95 * ATMOCO2)) {
+  if (ppm < ATMOCO2) {
     LEDgreen = 0;
     LEDred = 0;
     LEDblue = 1024;
-  } /* After calibration, one measurement per second is enough */ if (ppm > ATMOCO2) delay(1000);
+  } 
+  
+  /* After calibration, one measurement per second is enough */ 
+  if (ppm > ATMOCO2) delay(delay_time);
 
   /* Send values to LEDs */
   analogWrite(PINgreen, LEDgreen);
   analogWrite(PINred, LEDred);
   analogWrite(PINblue, LEDblue);
  
-  delay(1000);
-  
 }
 
 /* Get the resistance of the sensor, ie. the measurement value. Return the sensor resistance in kOhm */
