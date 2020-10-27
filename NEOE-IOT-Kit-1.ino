@@ -1,44 +1,46 @@
 /**********************************************************************************************************************************
-  This is a library for the MQ135 air quality sensor. Developed for the NEOE-IOT-Kit "Room Air Monitoring with MQ135 & NodeMCU"
-  https://www.neoe.io/collections/neoe-iot-kits/products/smarthome-iot-bausatz-luftqualitatssensor-mq-135-nodemcu-arduino-pcb
-  The library is still under construction and only a beta release.
-  Developed with input and suggestions from the community.
-  Please share your feedback, thougths and suggestions with us. https://www.facebook.com/groups/neoe.io/
-  Date of last change: September 3rd, 2020
+  Arduino-Sketch für das NEOE-IOT-Kit-1, "Smart Home Luftqualitätssensor mit MQ-135 und NodeMCU. Reagiert auf CO2 und andere Gase. 
+  Arduino-Programmierung. MQTT-kompatibel." 
+  https://www.neoe.io/products/smarthome-iot-bausatz-luftqualitatssensor-mq-135-nodemcu-arduino-breadbord
+  https://www.neoe.io/products/smarthome-iot-bausatz-luftqualitatssensor-mq-135-nodemcu-arduino-pcb
+  Fragen und Anregungen bitte in unserer Facebook-Gruppe adressieren, damit die gesamte Community davon profitiert. 
+  https://www.facebook.com/groups/neoe.io/
+  Datum der letzten Änderung: 27. Oktober, 2020
 **********************************************************************************************************************************/
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
-/* Parameters for average calculation */
+// Parameter zur Berechnung der Durchschnittswerte
 const int numReadings = 10;
-int readings[numReadings]; // the readings from the analog input
-int readIndex = 0; // the index of the current reading
-float total = 0; // the running total
-float average = 0; // the average
+int readings[numReadings]; // Array zur Berechnung der Durchschnittswerte
+int readIndex = 0; // Index eines einzelnen Wertes
+float total = 0; // Summe aller Werte
+float average = 0; // Durchschnittswert
 
-/* The load resistance on the board */
+// Lastwiderstand des MQ-135
 #define RLOAD 10.0
 
-/* Parameters for calculating ppm of CO2 from sensor resistance */
+// Parameter zur CO2 Berechnung in ppm auf Basis des Sensor-Widerstands
 #define PARA 116.6020682
 #define PARB 2.769034857
 
-/* Atmospheric CO2 level for calibration purposes */
+// CO2-Wert in der Atmosphäre, als Basis für die Kalibrierung
 #define ATMOCO2 397.13
 
-/* Parameter for delay between measurements in miliseconds */
-int delay_time = 1000;
+// Alle 10 Sekunden eine MQTT-Nachricht senden
+int delay_time = 10000;
 
-/* Analog PIN */
+// Analog PIN
 uint8_t _pin = 0;
 int pinValue;
 
-/* Parameters for Calibration */
+// Für die Kalibrierung erforderliche Parameter
 float RCurrent;
 float RMax;
 
-/* Parameters for indicator LED */
+// Parameter für die Indikator-LED
 int PINblue = 12;
 int PINgreen = 13;
 int PINred = 15;
@@ -46,24 +48,46 @@ float LEDgreen;
 float LEDred;
 float LEDblue;
 
-/* Parameter for notification status */
-int notified;
+// WLAN-Zugangsdaten hier hinterlegen
+const char* ssid = "NAME DES WLAN NETZWERKS"; // Anführungszeichen beibehalten
+const char* password = "WLAN-PASSWORT"; // Anführungszeichen beibehalten, also z.B. so: "Geheim"
 
-/* Update these with values suitable for your network. */
-const char* ssid = "ADD THE SSID OF YOUR WLAN HERE";
-const char* password = "ADD THE PASSWORD OF YOUR WLAN HERE";
-const char* mqtt_server = "ADD THE IP ADDRESS OF YOUR MQTT-SERVER HERE";
+// Die für den MQTT-Server erforderlichen Daten hier hinterlegen
+const char* mqtt_client = "NEOE-IOT-KIT-1-1"; // Wenn mehrere "NEOE IOT-Kits 1" im Einsatz sind, einfach mit der letzten Zahl durchnummerieren
+const char* mqttServer = "IP-ADRESSE DES MQTT-SERVERS"; // Anführungszeichen beibehalten, also z.B. so: "192.168.0.236"
 const uint16_t mqtt_port = 1883;
+const char* mqtt_user = "BENUTZERNAME"; // Anführungszeichen beibehalten
+const char* mqtt_password = "PASSWORT"; // Anführungszeichen beibehalten, also z.B. so: "Geheim"
+
+// MQTT-Topic für Home Assistant MQTT Auto Discovery
+const char* mqtt_config_topic = "homeassistant/sensor/NEOE-IOT-KIT-1-1/config";
+const char* mqtt_state_topic = "homeassistant/sensor/NEOE-IOT-KIT-1-1/state";
+
+// MQTT-Version
+#define MQTT_VERSION MQTT_VERSION_3_1_1
+
+// Speicher-Reservierung für JSON-Dokument, kann mithilfe von arduinojson.org/v6/assistant noch optimiert werden
+StaticJsonDocument<500> doc_config;
+StaticJsonDocument<500> doc_state;
+
+char mqtt_config_data[500];
+char mqtt_state_data[500];
+
+bool configured = false;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
-long lastMsg = 0;
-char msg[50];
-int value = 0;
 
+// Funktion um CO2-Werte per MQTT zu übermitteln
+void publishData(float p_co2) {
+  doc_state["co2"] = round(p_co2);
+  serializeJson(doc_state, mqtt_state_data);
+  client.publish(mqtt_state_topic, mqtt_state_data);
+}
+
+// Funktion zur Verbindung mit dem WLAN
 void setup_wifi() {
   delay(10);
-  // We start by connecting to a WiFi network
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -71,32 +95,43 @@ void setup_wifi() {
   randomSeed(micros());
 }
 
+// Funktion zur MQTT-Verbindung
 void reconnect() {
-  // Loop until we're reconnected
   while (!client.connected()) {
-    // Create a random client ID
-    String clientId = "ESP8266Client-";
-    clientId += String(random(0xffff), HEX);
-    // Attempt to connect
-    if (client.connect(clientId.c_str())) {
-      client.subscribe("inTopic");
+    if (client.connect(mqtt_client, mqtt_user, mqtt_password)) {
     } else {
-      // Wait 5 seconds before retrying
       delay(5000);
     }
   }
 }
 
+// Widerstand des Sensors (in Kiloohm) berechnen
+float getResistance() {
+  int val = average;
+  return ((1023. / (float)val) - 1.) * RLOAD;
+}
+
+// CO2 Wert in ppm berechnen. Auf Basis der Vereinfachung, dass sich nur CO2 in der Luft befindet.
+float getPPM() {
+  return PARA * pow((getResistance() / RMax), -PARB);
+}
+
+// RZero Widerstand des Sensors (in Kiloohm) für die Kalibrierung berechnen
+float getRZero() {
+  return getResistance() * pow((ATMOCO2 / PARA), (1. / PARB));
+}
+
 void setup() {
 
-  /* Prepare array for average calculation */
+  // Array zur Berechnung der Durchschnittswerte aufbauen
   for (int thisReading = 0; thisReading < numReadings; thisReading++) {
     readings[thisReading] = 0;
   }
 
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
-
+  client.setBufferSize(512);
+  
 }
 
 void loop() {
@@ -104,27 +139,39 @@ void loop() {
   if (!client.connected()) {
     reconnect();
   }
-  client.loop();
 
-  /* Read sensor data and create average */ 
+  if (configured==false){
+  doc_config["name"] = "CO2-Sensor";
+  doc_config["state_topic"] = "homeassistant/sensor/NEOE-IOT-KIT-1-1/state";
+  doc_config["unit_of_measurement"] = "ppm";
+  doc_config["value_template"] = "{{ value_json.co2}}";
+  serializeJson(doc_config, mqtt_config_data);
+  // aktuell können nur QOS 0 Nachrichten verschickt werden, daher senden wir die Nachricht sicherheitshalber drei Mal.
+  for ( int x = 0; x < 2; x++ ){
+  client.publish(mqtt_config_topic, mqtt_config_data, true);
+  delay(1000);
+  }
+  configured = true;
+  }
+  // Sensor auslesen und Durchschnittswerte berechnen 
   total = total - readings[readIndex]; readings[readIndex] = analogRead(_pin); total = total + readings[readIndex]; readIndex = readIndex + 1; if (readIndex >= numReadings) {
     readIndex = 0;
   }
   average = total / numReadings;
 
-  /* Sensor very volatile, smooth calibration, consider RCurrent with only 0,001% */
+  // Volatiler Sensor, daher sanfte Kalibrierung, RCurrent nur mit 0,001%
   float RCurrent = getRZero();
   if ((((9999 * RMax) + RCurrent) / 10000) > RMax) {
     RMax = (((9999 * RMax) + RCurrent) / 10000); 
   }
 
-  /* Calculate PPM */
+  // ppm berechnen
   float ppm = getPPM();
 
-  /* After calibration, send data to MQTT */
-  if (ppm > ATMOCO2)  client.publish("outTopic", String(ppm).c_str());
+  // Nach Abschluss der Kalibierung beginnen, Daten via MQTT zu übermitteln
+  if (ppm > ATMOCO2)  publishData(ppm);
 
-  /* Indicator LED */
+  // Indikator-LED
   LEDblue = 0;
   LEDred = (1024 * ((ppm - 500) / 500)) / 3;
   LEDgreen = 1024 - ((1024 * ((ppm - 500) / 500)) / 3);
@@ -132,35 +179,19 @@ void loop() {
   if (LEDred < 0) LEDred = 0; if (LEDgreen > 1024)LEDgreen = 1024;
   if (LEDgreen < 0) LEDgreen = 0; 
 
-  /* Calibration LED indicator. Switch already from blue to green when within 95% range. */
+  // Indikator-LED schaltet von Blau (Kalibrierung) auf Grün, sobald Daten im 95% Bereich
   if (ppm < ATMOCO2) {
     LEDgreen = 0;
     LEDred = 0;
     LEDblue = 1024;
   } 
   
-  /* After calibration, one measurement per second is enough */ 
+  // Nach erfolgter Kalibrierung Anzahl der Messungen reduzieren, da sonst zu viele MQTT-Meldungen versendet werden
   if (ppm > ATMOCO2) delay(delay_time);
 
-  /* Send values to LEDs */
+  // Werte an Indikator-LED senden
   analogWrite(PINgreen, LEDgreen);
   analogWrite(PINred, LEDred);
   analogWrite(PINblue, LEDblue);
  
-}
-
-/* Get the resistance of the sensor, ie. the measurement value. Return the sensor resistance in kOhm */
-float getResistance() {
-  int val = average;
-  return ((1023. / (float)val) - 1.) * RLOAD;
-}
-
-/* Get the ppm of CO2 sensed (assuming only CO2 in the air. Return The ppm of CO2 in the air */
-float getPPM() {
-  return PARA * pow((getResistance() / RMax), -PARB);
-}
-
-/* Get the resistance RZero of the sensor for calibration purposes. Return the sensor resistance RZero in kOhm */
-float getRZero() {
-  return getResistance() * pow((ATMOCO2 / PARA), (1. / PARB));
 }
