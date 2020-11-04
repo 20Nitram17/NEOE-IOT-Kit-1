@@ -6,7 +6,7 @@
   https://www.neoe.io/blogs/tutorials/luftqualitatssensor-reagiert-auf-co2-mqtt-kompatibel-aufbau-variante-leiterplatte
   Fragen und Anregungen bitte in unserer Facebook-Gruppe adressieren, damit die gesamte Community davon profitiert.
   https://www.facebook.com/groups/neoe.io/
-  Datum der letzten Änderung: 27. Oktober, 2020
+  Datum der letzten Änderung: 5. November, 2020
 **********************************************************************************************************************************/
 
 #include <ESP8266WiFi.h>
@@ -55,7 +55,7 @@ const char* password = "WLAN-PASSWORT"; // Anführungszeichen beibehalten, also 
 
 // Die für den MQTT-Server erforderlichen Daten hier hinterlegen
 const char* mqtt_client = "NEOE-IOT-KIT-1-1"; // Wenn mehrere "NEOE IOT-Kits 1" im Einsatz sind, einfach mit der letzten Zahl durchnummerieren
-const char* mqttServer = "IP-ADRESSE DES MQTT-SERVERS"; // Anführungszeichen beibehalten, also z.B. so: "192.168.0.236"
+const char* mqtt_server = "IP-ADRESSE DES MQTT-SERVERS"; // Anführungszeichen beibehalten, also z.B. so: "192.168.0.123"
 const uint16_t mqtt_port = 1883;
 const char* mqtt_user = "BENUTZERNAME"; // Anführungszeichen beibehalten
 const char* mqtt_password = "PASSWORT"; // Anführungszeichen beibehalten, also z.B. so: "Geheim"
@@ -88,19 +88,9 @@ void setup_wifi() {
   delay(10);
   /* Mit WLAN verbinden */
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+//  while (WiFi.status() != WL_CONNECTED) {  // Auskommentiert um Standalone-Modus ohne WLAN zu ermöglichen. Für sicherere Verbindung Auskommentierung entfernen.
     delay(500);
-  }
-}
-
-// Funktion zur MQTT-Verbindung
-void reconnect() {
-  while (!client.connected()) {
-    if (client.connect(mqtt_client, mqtt_user, mqtt_password)) {
-    } else {
-      delay(5000);
-    }
-  }
+//  }  // Auskommentiert um Standalone-Modus ohne WLAN zu ermöglichen. Für sicherere Verbindung Auskommentierung entfernen.
 }
 
 // Funktion für Home Assistant MQTT Auto Discovery
@@ -138,13 +128,13 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
   client.setBufferSize(512);
-  if (!client.connected()) reconnect();
+  if (!client.connected()) client.connect(mqtt_client, mqtt_user, mqtt_password);
   configMqtt();
 }
 
 void loop() {
 
-  if (!client.connected()) reconnect();
+  if (!client.connected()) client.connect(mqtt_client, mqtt_user, mqtt_password);
 
   // Sensor auslesen und Durchschnittswerte berechnen
   total = total - readings[readIndex]; readings[readIndex] = analogRead(_pin); total = total + readings[readIndex]; readIndex = readIndex + 1; if (readIndex >= numReadings) {
