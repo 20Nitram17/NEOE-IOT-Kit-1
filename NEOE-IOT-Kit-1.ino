@@ -21,7 +21,8 @@ float total = 0; // Summe aller Werte
 float average = 0; // Durchschnittswert
 
 // Lastwiderstand des MQ-135
-#define RLOAD 10.0
+#define RLOAD 1.0  // Für NEOE-IOT-Kit-1 Modell a
+// #define RLOAD 10.0  // Für NEOE-IOT-Kit-1 Modell b
 
 // Parameter zur CO2 Berechnung in ppm auf Basis des Sensor-Widerstands
 #define PARA 116.6020682
@@ -88,9 +89,9 @@ void setup_wifi() {
   delay(10);
   /* Mit WLAN verbinden */
   WiFi.begin(ssid, password);
-//  while (WiFi.status() != WL_CONNECTED) {  // Auskommentiert um Standalone-Modus ohne WLAN zu ermöglichen. Für sicherere Verbindung Auskommentierung entfernen.
+  while (WiFi.status() != WL_CONNECTED) {  
     delay(500);
-//  }  // Auskommentiert um Standalone-Modus ohne WLAN zu ermöglichen. Für sicherere Verbindung Auskommentierung entfernen.
+  }  
 }
 
 // Funktion für Home Assistant MQTT Auto Discovery
