@@ -21,8 +21,8 @@ float total = 0; // Summe aller Werte
 float average = 0; // Durchschnittswert
 
 // Lastwiderstand des MQ-135
-#define RLOAD 1000  // Für NEOE-IOT-Kit-1 Modell a
-// #define RLOAD 10000  // Für NEOE-IOT-Kit-1 Modell b
+#define RLOAD 1.0  // Für NEOE-IOT-Kit-1 Modell a
+// #define RLOAD 10.0  // Für NEOE-IOT-Kit-1 Modell b
 
 // Parameter zur CO2 Berechnung in ppm auf Basis des Sensor-Widerstands
 #define PARA 116.6020682
