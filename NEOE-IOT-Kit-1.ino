@@ -6,7 +6,7 @@
   https://www.neoe.io/blogs/tutorials/luftqualitatssensor-reagiert-auf-co2-mqtt-kompatibel-aufbau-variante-leiterplatte
   Fragen und Anregungen bitte in unserer Facebook-Gruppe adressieren, damit die gesamte Community davon profitiert.
   https://www.facebook.com/groups/neoe.io/
-  Datum der letzten Änderung: 5. November, 2020
+  Datum der letzten Änderung: 25. November, 2020
 **********************************************************************************************************************************/
 
 #include <ESP8266WiFi.h>
