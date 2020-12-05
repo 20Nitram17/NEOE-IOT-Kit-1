@@ -1,2 +1,2 @@
 # NEOE IOT-Kit 1
-Arduino-Sketch für Luftqualitätssensor mit MQ-135 und NodeMCU. Reagiert auf CO2 und andere Gase. MQTT-kompatibel zur Anbindung an Home Assistant.
+eCO2-Sensor, Thermometer, Hygrometer mit OLED-Display. Arduino-Programmierung. MQTT-kompatibel zur Anbindung an Home Assistant.
