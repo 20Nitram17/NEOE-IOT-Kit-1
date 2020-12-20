@@ -1,0 +1,113 @@
+// Parameter zur Berechnung der Durchschnittswerte
+const int numReadings = 10;
+int readings[numReadings]; // Array zur Berechnung der Durchschnittswerte
+int readIndex = 0; // Index eines einzelnen Wertes
+float total = 0; // Summe aller Werte
+float average = 0; // Durchschnittswert
+
+// Lastwiderstand des MQ-135
+#define RLOAD 10.0
+
+// Parameter zur CO2 Berechnung in ppm auf Basis des Sensor-Widerstands
+#define PARA 116.6020682
+#define PARB 2.769034857
+
+// CO2-Wert in der Atmosphäre, als Basis für die Kalibrierung
+#define ATMOCO2 397.13
+
+// Nach Kalibrierung, eine Messung pro Sekunde
+int delay_time = 1000;
+
+// Analog PIN
+uint8_t _pin = 0;
+int pinValue;
+
+// Für die Kalibrierung erforderliche Parameter
+float RCurrent;
+float RMax;
+
+// Parameter für die Indikator-LED
+int PINblue = 12;
+int PINgreen = 13;
+int PINred = 15;
+float LEDgreen;
+float LEDred;
+float LEDblue;
+
+// Widerstand des Sensors (in Kiloohm) berechnen
+float getResistance() {
+  int val = average;
+  return ((1023. / (float)val) - 1.) * RLOAD;
+}
+
+// CO2 Wert in ppm berechnen. Auf Basis der Vereinfachung, dass sich nur CO2 in der Luft befindet.
+float getPPM() {
+  return PARA * pow((getResistance() / RMax), -PARB);
+}
+
+// RZero Widerstand des Sensors (in Kiloohm) für die Kalibrierung berechnen
+float getRZero() {
+  return getResistance() * pow((ATMOCO2 / PARA), (1. / PARB));
+}
+
+void setup() {
+  // Array zur Berechnung der Durchschnittswerte aufbauen
+  for (int thisReading = 0; thisReading < numReadings; thisReading++) {
+    readings[thisReading] = 0;
+  }
+}
+
+void loop() {
+
+  // Sensor auslesen und Durchschnittswerte berechnen
+  total = total - readings[readIndex]; readings[readIndex] = analogRead(_pin); total = total + readings[readIndex]; readIndex = readIndex + 1; if (readIndex >= numReadings) {
+    readIndex = 0;
+  }
+  average = total / numReadings;
+
+  // Volatiler Sensor, daher sanfte Kalibrierung, RCurrent nur mit 0,01%
+  float RCurrent = getRZero();
+  if ((((999 * RMax) + RCurrent) / 1000) > RMax) {
+    RMax = (((999 * RMax) + RCurrent) / 1000);
+  }
+
+  // ppm berechnen
+  float ppm = getPPM();
+
+  // Kalibrierung -> Blau
+  if (ppm < ATMOCO2) {
+    LEDgreen = 0;
+    LEDred = 0;
+    LEDblue = 1024;
+  }
+
+  // Alles OK -> Grün
+  if ((ppm >= ATMOCO2) && (ppm < 1000)) {
+    LEDgreen = 1024;
+    LEDred = 0;
+    LEDblue = 0;
+  }
+
+  // Solangsam Zeit, zu Lüften -> Gelb
+  if ((ppm >= 1000) && (ppm < 2000)) {
+    LEDgreen = 350;
+    LEDred = 1024;
+    LEDblue = 0;
+  }
+
+  // Höchste Zeit, zu Lüften -> Rot
+  if (ppm >= 2000) {
+    LEDgreen = 0;
+    LEDred = 1024;
+    LEDblue = 0;
+  }
+
+  // Nach erfolgter Kalibrierung Anzahl der Messungen reduzieren
+  if (ppm > ATMOCO2) delay(delay_time);
+
+  // Werte an Indikator-LED senden
+  analogWrite(PINgreen, LEDgreen);
+  analogWrite(PINred, LEDred);
+  analogWrite(PINblue, LEDblue);
+
+}
